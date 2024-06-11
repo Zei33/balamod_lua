@@ -437,5 +437,58 @@ return {
         end
         table.insert(lines, line)
         return lines
-    end
+    end,
+	getScrollBarDimensions = function(self)
+		local dimensions = {}
+
+		dimensions.historyLines = 0
+		for _, message in ipairs(logging.getAllMessages()) do
+            if message.level_numeric >= self.logger.log_levels[self.log_level] then
+				dimensions.historyLines = dimensions.historyLines + #self:wrapText(message.text, love.graphics.getWidth() - 20)
+            end
+        end
+
+		dimensions.background = {
+			x = love.graphics.getWidth() - 30, 
+			y = 30, 
+			w = 20, 
+			h = love.graphics.getHeight() - 60
+		}
+
+		dimensions.topButton = {
+			background = {
+				x = love.graphics.getWidth() - 30, 
+				y = 10, 
+				w = 20, 
+				h = 20
+			},
+			arrow = {
+				x1 = love.graphics.getWidth() - 26, 
+				y1 = 26, 
+				x2 = love.graphics.getWidth() - 14, 
+				y2 = 26, 
+				x3 = love.graphics.getWidth() - 20, 
+				y3 = 14
+			}
+		}
+		
+		dimensions.bottomButton = {
+			background = {
+				x = love.graphics.getWidth() - 30, 
+				y = (love.graphics.getHeight() - 60) + 30, 
+				w = 20, 
+				h = 20
+			},
+			arrow = {
+				x1 = love.graphics.getWidth() - 26, 
+				y1 = (love.graphics.getHeight() - 60) + 34, 
+				x2 = love.graphics.getWidth() - 14, 
+				y2 = (love.graphics.getHeight() - 60) + 34, 
+				x3 = love.graphics.getWidth() - 20, 
+				y3 = (love.graphics.getHeight() - 60) + 46
+			}
+		}
+
+		return dimensions
+	end
 }

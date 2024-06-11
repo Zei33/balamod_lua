@@ -1221,7 +1221,7 @@ mods['dev_console'] = {
         local font = love.graphics.getFont()
         if console.is_open then
             love.graphics.setColor(0, 0, 0, 0.3)
-            love.graphics.rectangle('fill', 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+            love.graphics.rectangle('fill', 10, 10, love.graphics.getWidth() - 20, love.graphics.getHeight() - 20)
             local messagesToDisplay = console:getMessagesToDisplay()
             local i = 1
             for _, message in ipairs(messagesToDisplay) do
@@ -1239,6 +1239,37 @@ mods['dev_console'] = {
                     i = i + 1
                 end
             end
+
+			local dimensions = console:getScrollBarDimensions();
+
+			-- Scroll bar background
+			love.graphics.setColor(0.4, 0.4, 0.4, 0.4)
+			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y, dimensions.background.w,  dimensions.background.h)
+
+			-- Scroll bar top icon
+			love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
+			love.graphics.rectangle('fill', dimensions.topButton.background.x, dimensions.topButton.background.y, dimensions.topButton.background.w, dimensions.topButton.background.h)
+			love.graphics.polygon('fill', dimensions.topButton.arrow.x1, dimensions.topButton.arrow.y1, dimensions.topButton.arrow.x2, dimensions.topButton.arrow.y2, dimensions.topButton.arrow.x3, dimensions.topButton.arrow.y3)
+
+			-- Scroll bar bottom icon
+			love.graphics.rectangle('fill', dimensions.bottomButton.background.x, dimensions.bottomButton.background.y, dimensions.bottomButton.background.w, dimensions.bottomButton.background.h)
+			love.graphics.polygon('fill', dimensions.bottomButton.arrow.x1, dimensions.bottomButton.arrow.y1, dimensions.bottomButton.arrow.x2, dimensions.bottomButton.arrow.y2, dimensions.bottomButton.arrow.x3, dimensions.bottomButton.arrow.y3)
+
+			-- Scroll bar slider
+			logger:info(dimensions.historyLines .. " " .. console.max_lines)
+
+			local sliderHeight = 0
+			if (dimensions.historyLines > console.max_lines) then
+				sliderHeight = dimensions.background.h * (console.max_lines / dimensions.historyLines)
+			else
+				sliderHeight = dimensions.background.h
+			end
+			local offset = dimensions.background.h - sliderHeight
+
+			love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
+			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y + offset, dimensions.background.w, sliderHeight)
+			
+			-- Command line text
             love.graphics.setColor(1, 1, 1, 1) -- white
             love.graphics.print(console.cmd, 10, love.graphics.getHeight() - 30)
         end
