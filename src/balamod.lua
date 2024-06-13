@@ -627,6 +627,11 @@ end
 
 -- apis will be loaded first, then mods
 
+local function mouseInRectangle(x, y, w, h)
+	local mx, my = love.mouse.getPosition()
+	return mx >= x and mx <= x + w and my >= y and my <= y + h
+end
+
 mods['dev_console'] = {
     id = 'dev_console',
     name = 'Dev Console',
@@ -1222,6 +1227,7 @@ mods['dev_console'] = {
         if console.is_open then
             love.graphics.setColor(0, 0, 0, 0.3)
             love.graphics.rectangle('fill', 10, 10, love.graphics.getWidth() - 20, love.graphics.getHeight() - 20)
+			local prev_messages_total_lines = console.messages_total_lines
             local messagesToDisplay = console:getMessagesToDisplay()
             local i = 1
             for _, message in ipairs(messagesToDisplay) do
@@ -1240,6 +1246,7 @@ mods['dev_console'] = {
                 end
             end
 
+			-- Scroll bar rendering
 			local dimensions = console:getScrollBarDimensions();
 
 			-- Scroll bar background
@@ -1247,28 +1254,74 @@ mods['dev_console'] = {
 			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y, dimensions.background.w,  dimensions.background.h)
 
 			-- Scroll bar top icon
-			love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
+			if mouseInRectangle(dimensions.topButton.background.x, dimensions.topButton.background.y, dimensions.topButton.background.w, dimensions.topButton.background.h) then
+				love.graphics.setColor(0.6, 0.6, 0.6, 0.5)
+			else
+				love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
+			end
 			love.graphics.rectangle('fill', dimensions.topButton.background.x, dimensions.topButton.background.y, dimensions.topButton.background.w, dimensions.topButton.background.h)
 			love.graphics.polygon('fill', dimensions.topButton.arrow.x1, dimensions.topButton.arrow.y1, dimensions.topButton.arrow.x2, dimensions.topButton.arrow.y2, dimensions.topButton.arrow.x3, dimensions.topButton.arrow.y3)
 
 			-- Scroll bar bottom icon
+			if mouseInRectangle(dimensions.bottomButton.background.x, dimensions.bottomButton.background.y, dimensions.bottomButton.background.w, dimensions.bottomButton.background.h) then
+				love.graphics.setColor(0.6, 0.6, 0.6, 0.5)
+			else
+				love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
+			end
 			love.graphics.rectangle('fill', dimensions.bottomButton.background.x, dimensions.bottomButton.background.y, dimensions.bottomButton.background.w, dimensions.bottomButton.background.h)
 			love.graphics.polygon('fill', dimensions.bottomButton.arrow.x1, dimensions.bottomButton.arrow.y1, dimensions.bottomButton.arrow.x2, dimensions.bottomButton.arrow.y2, dimensions.bottomButton.arrow.x3, dimensions.bottomButton.arrow.y3)
 
-			-- Scroll bar slider
-			logger:info(dimensions.historyLines .. " " .. console.max_lines)
-
-			local sliderHeight = 0
-			if (dimensions.historyLines > console.max_lines) then
-				sliderHeight = dimensions.background.h * (console.max_lines / dimensions.historyLines)
+			-- Scroll bar slider height resize
+			local prev_slider_height = console.scroll.slider_height
+			if console.messages_total_lines > console.max_lines then
+				console.scroll.slider_height = dimensions.background.h * (console.max_lines / console.messages_total_lines)
 			else
-				sliderHeight = dimensions.background.h
+				console.scroll.slider_height = dimensions.background.h
 			end
-			local offset = dimensions.background.h - sliderHeight
 
-			love.graphics.setColor(0.5, 0.5, 0.5, 0.8)
-			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y + offset, dimensions.background.w, sliderHeight)
+			if console.scroll.offset == nil then
+				-- Set initial scroll position
+				console.scroll.offset = dimensions.background.h - console.scroll.slider_height
+			elseif console.start_line_offset >= 0 then
+				-- Do not scroll if the slider is at the bottom
+				console.scroll.offset = console.scroll.offset + (prev_slider_height - console.scroll.slider_height)
+			end
+
+			-- Scroll bar slider and dragging
+			if console.mouse_pressed_coords.y and (mouseInRectangle(dimensions.background.x, dimensions.background.y + console.scroll.offset, dimensions.background.w, console.scroll.slider_height) or console.scroll.drag) then
+				console.scroll.drag = true
+				love.graphics.setColor(0.5, 0.5, 0.5, 0.9)
+				local delta = love.mouse.getY() - console.mouse_pressed_coords.y
+				local maxOffset = dimensions.background.h - console.scroll.slider_height
+				console.scroll.offset = math.min(maxOffset, math.max(0, console.scroll.offset + delta))
+				console.mouse_pressed_coords.y = love.mouse.getY()
+			else
+				love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
+			end
+			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y + console.scroll.offset, dimensions.background.w, console.scroll.slider_height)
 			
+			-- Debug information
+			if (console.scroll.offset) then
+				love.graphics.setColor(1, 0.8, 0.6, 1) -- white
+				local percentage = (console.scroll.offset / (dimensions.background.h - console.scroll.slider_height))
+				love.graphics.print("percentage " .. percentage, love.graphics.getWidth() - 200, love.graphics.getHeight() - 100)
+
+				local max_offset = math.max(0, console.messages_total_lines - console.max_lines)
+				love.graphics.print("max_offset " .. max_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 80)
+				
+				local true_offset = math.floor(max_offset * percentage);
+				love.graphics.print("true_offset " .. true_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 60)
+				
+				love.graphics.print("total_lines " .. console.messages_total_lines, love.graphics.getWidth() - 200, love.graphics.getHeight() - 40)
+				love.graphics.print("start_line " .. console.start_line_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 20)
+				
+				if true_offset ~= true_offset then 
+					
+				else
+					console.start_line_offset = true_offset - max_offset
+				end
+			end
+
 			-- Command line text
             love.graphics.setColor(1, 1, 1, 1) -- white
             love.graphics.print(console.cmd, 10, love.graphics.getHeight() - 30)
@@ -1314,11 +1367,18 @@ mods['dev_console'] = {
     end,
     on_mouse_pressed = function(x, y, button, touches)
         if console.is_open then
+			if button == 1 then 
+				console.mouse_pressed_coords = { x = x, y = y } 
+			end
             return true -- Do not press buttons through the console, this cancels the event
         end
     end,
     on_mouse_released = function(x, y, button)
         if console.is_open then
+			if button == 1 then 
+				console.scroll.drag = false
+				console.mouse_pressed_coords = { x = nil, y = nil } 
+			end
             return true -- Do not release buttons through the console, this cancels the event
         end
     end

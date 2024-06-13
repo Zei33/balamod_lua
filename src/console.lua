@@ -13,6 +13,7 @@ return {
     line_height = 20,
     max_lines = love.graphics.getHeight() / 20,
     start_line_offset = 1,
+	messages_total_lines = 0,
     history_index = 0,
     command_history = {},
     history_path = 'dev_console.history',
@@ -25,12 +26,18 @@ return {
         alt = false,
         meta = false
     },
+	mouse_pressed_coords = { x = nil, y = nil },
+	scroll = {
+		drag = false,
+		offset = nil,
+		slider_height = nil
+	},
     commands = {},
     toggle = function(self)
         self.is_open = not self.is_open
         love.keyboard.setKeyRepeat(self.is_open) -- set key repeat to true when console is open
         if self.is_open then
-            self.start_line_offset = self.max_lines - 1
+            self.start_line_offset = self.max_lines
             local oldTextInput = love.textinput
             love.textinput = function(character)
                 self.cmd = self.cmd .. character
@@ -119,8 +126,11 @@ return {
     end,
     getFilteredMessages = function(self)
         local filtered = {}
+
+		self.messages_total_lines = 0
         for _, message in ipairs(logging.getAllMessages()) do
             if message.level_numeric >= self.logger.log_levels[self.log_level] then
+				self.messages_total_lines = self.messages_total_lines + #self:wrapText(message.text, love.graphics.getWidth() - 20)
                 table.insert(filtered, message)
             end
         end
@@ -244,8 +254,8 @@ return {
         end
         if key_name == 'home' or (platform.is_mac and key_name == 'left' and self.modifiers.meta) then
             -- move text to the oldest (top)
-            local messages = self:getFilteredMessages()
-            self.start_line_offset = self.max_lines - #messages
+            --local messages = self:getFilteredMessages()
+            self.start_line_offset = self.max_lines - self.messages_total_lines --#all_messages
             return
         end
         if key_name == 'pagedown' or (platform.is_mac and key_name == 'down' and self.modifiers.meta) then
@@ -440,13 +450,6 @@ return {
     end,
 	getScrollBarDimensions = function(self)
 		local dimensions = {}
-
-		dimensions.historyLines = 0
-		for _, message in ipairs(logging.getAllMessages()) do
-            if message.level_numeric >= self.logger.log_levels[self.log_level] then
-				dimensions.historyLines = dimensions.historyLines + #self:wrapText(message.text, love.graphics.getWidth() - 20)
-            end
-        end
 
 		dimensions.background = {
 			x = love.graphics.getWidth() - 30, 
