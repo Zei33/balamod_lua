@@ -632,13 +632,50 @@ local function mouseInRectangle(x, y, w, h)
 	return mx >= x and mx <= x + w and my >= y and my <= y + h
 end
 
+local function drawRoundedRectangle(drawmode, x, y, w, h, radius)
+	-- Top-left corner
+    if (radius.tl > 0) then
+        love.graphics.arc(drawmode, 'pie', x + radius.tl, y + radius.tl, radius.tl, math.pi, math.pi * 1.5)
+    end
+
+    -- Top-right corner
+    if (radius.tr > 0) then
+        love.graphics.arc(drawmode, 'pie', x + w - radius.tr, y + radius.tr, radius.tr, math.pi * 1.5, math.pi * 2)
+    end
+
+    -- Bottom-left corner
+    if (radius.bl > 0) then
+        love.graphics.arc(drawmode, 'pie', x + radius.bl, y + h - radius.bl, radius.bl, math.pi / 2, math.pi)
+    end
+
+    -- Bottom-right corner
+    if (radius.br > 0) then
+        love.graphics.arc(drawmode, 'pie', x + w - radius.br, y + h - radius.br, radius.br, 0, math.pi / 2)
+    end
+
+    -- Connect the arcs with rectangles
+    -- Top rectangle
+    love.graphics.rectangle(drawmode, x + radius.tl, y, w - radius.tl - radius.tr, radius.tl)
+    -- Bottom rectangle
+    love.graphics.rectangle(drawmode, x + radius.bl, y + h - math.max(radius.bl, radius.br), w - radius.bl - radius.br, math.max(radius.bl, radius.br))
+    -- Left rectangle
+    love.graphics.rectangle(drawmode, x, y + radius.tl, radius.tl, h - radius.tl - radius.bl)
+    -- Right rectangle
+    love.graphics.rectangle(drawmode, x + w - radius.tr, y + radius.tr, radius.tr, h - radius.tr - radius.br)
+    -- Center rectangle
+    love.graphics.rectangle(drawmode, x + radius.tl, y + radius.tl, w - radius.tl - radius.tr, h - radius.tl - math.max(radius.bl, radius.br))
+end
+
 mods['dev_console'] = {
     id = 'dev_console',
     name = 'Dev Console',
     version = '0.6.0',
-    author = 'sbordeyne & UwUDev',
-    description = {'Press F2 to open/close the console', 'Use command `help` for a list of ',
-                   'available commands and shortcuts'},
+    author = 'sbordeyne & UwUDev & Zei33',
+    description = {
+		'Press F2 to open/close the console', 
+		'Use command `help` for a list of ',
+        'available commands and shortcuts'
+	},
     enabled = true,
     on_game_load = function(args)
         console.logger:info('Game loaded', args)
@@ -1222,109 +1259,101 @@ mods['dev_console'] = {
         return false
     end,
     on_post_render = function()
-        console.max_lines = math.floor(love.graphics.getHeight() / console.line_height) - 5 -- 5 lines of bottom padding
         local font = love.graphics.getFont()
         if console.is_open then
-            love.graphics.setColor(0, 0, 0, 0.3)
-            love.graphics.rectangle('fill', 10, 10, love.graphics.getWidth() - 20, love.graphics.getHeight() - 20)
-			local prev_messages_total_lines = console.messages_total_lines
-            local messagesToDisplay = console:getMessagesToDisplay()
-            local i = 1
-            for _, message in ipairs(messagesToDisplay) do
-                r, g, b = console:getMessageColor(message)
-                love.graphics.setColor(r, g, b, 1)
-                local formattedMessage = message:formatted()
-                if font:getWidth(formattedMessage) > love.graphics.getWidth() then
-                    local lines = console:wrapText(formattedMessage, love.graphics.getWidth())
-                    for _, line in ipairs(lines) do
-                        love.graphics.print(line, 10, 10 + i * 20)
-                        i = i + 1
-                    end
-                else
-                    love.graphics.print(formattedMessage, 10, 10 + i * 20)
-                    i = i + 1
-                end
-            end
+			local dimensions = console.dimensions
 
-			-- Scroll bar rendering
-			local dimensions = console:getScrollBarDimensions();
+			-- Console window
+			love.graphics.setColor(0, 0, 0, 0.3)
+			drawRoundedRectangle('fill', dimensions.window.x, dimensions.window.y, dimensions.window.w, dimensions.window.h, dimensions.window.r)
+
+			-- Command input
+			love.graphics.setColor(0, 0, 0, 0.3)
+			drawRoundedRectangle('fill', dimensions.commandInput.background.x, dimensions.commandInput.background.y, dimensions.commandInput.background.w, dimensions.commandInput.background.h, dimensions.commandInput.background.r)
+            
+			love.graphics.setColor(1, 1, 1, 1)
+			-- Control cursor visibility
+			local cursor = console.command_cursor.symbol
+			if console.command_cursor.countdown > 0 then
+				console.command_cursor.countdown = console.command_cursor.countdown - 1
+			else
+				console.command_cursor.visible = not console.command_cursor.visible
+				console.command_cursor.countdown = console.command_cursor.timer
+			end
+			if not console.command_cursor.visible then
+				cursor = ''
+			end
+			-- Command text (prefix, command, cursor)
+			love.graphics.print(console.command_prefix, dimensions.commandInput.text.x, dimensions.commandInput.text.y - 2) -- Need to offset > to center it vertically.
+			love.graphics.print(console.cmd, dimensions.commandInput.text.x + 12, dimensions.commandInput.text.y)
+			local cursor_position = love.graphics.getFont():getWidth(string.sub(console.cmd, 1, console.command_cursor.position))
+			love.graphics.print(cursor, dimensions.commandInput.text.x + 11 + cursor_position, dimensions.commandInput.text.y - 1)
 
 			-- Scroll bar background
 			love.graphics.setColor(0.4, 0.4, 0.4, 0.4)
-			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y, dimensions.background.w,  dimensions.background.h)
+			love.graphics.rectangle('fill', dimensions.slider.background.x, dimensions.slider.background.y, dimensions.slider.background.w,  dimensions.slider.background.h)
 
 			-- Scroll bar top icon
-			if mouseInRectangle(dimensions.topButton.background.x, dimensions.topButton.background.y, dimensions.topButton.background.w, dimensions.topButton.background.h) then
+			if mouseInRectangle(dimensions.slider.topButton.background.x, dimensions.slider.topButton.background.y, dimensions.slider.topButton.background.w, dimensions.slider.topButton.background.h) then
 				love.graphics.setColor(0.6, 0.6, 0.6, 0.5)
 			else
 				love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
 			end
-			love.graphics.rectangle('fill', dimensions.topButton.background.x, dimensions.topButton.background.y, dimensions.topButton.background.w, dimensions.topButton.background.h)
-			love.graphics.polygon('fill', dimensions.topButton.arrow.x1, dimensions.topButton.arrow.y1, dimensions.topButton.arrow.x2, dimensions.topButton.arrow.y2, dimensions.topButton.arrow.x3, dimensions.topButton.arrow.y3)
+			drawRoundedRectangle('fill', dimensions.slider.topButton.background.x, dimensions.slider.topButton.background.y, dimensions.slider.topButton.background.w, dimensions.slider.topButton.background.h, dimensions.slider.topButton.background.r)
+			love.graphics.polygon('fill', dimensions.slider.topButton.arrow.x1, dimensions.slider.topButton.arrow.y1, dimensions.slider.topButton.arrow.x2, dimensions.slider.topButton.arrow.y2, dimensions.slider.topButton.arrow.x3, dimensions.slider.topButton.arrow.y3)
 
 			-- Scroll bar bottom icon
-			if mouseInRectangle(dimensions.bottomButton.background.x, dimensions.bottomButton.background.y, dimensions.bottomButton.background.w, dimensions.bottomButton.background.h) then
+			if mouseInRectangle(dimensions.slider.bottomButton.background.x, dimensions.slider.bottomButton.background.y, dimensions.slider.bottomButton.background.w, dimensions.slider.bottomButton.background.h) then
 				love.graphics.setColor(0.6, 0.6, 0.6, 0.5)
 			else
 				love.graphics.setColor(0.6, 0.6, 0.6, 0.4)
 			end
-			love.graphics.rectangle('fill', dimensions.bottomButton.background.x, dimensions.bottomButton.background.y, dimensions.bottomButton.background.w, dimensions.bottomButton.background.h)
-			love.graphics.polygon('fill', dimensions.bottomButton.arrow.x1, dimensions.bottomButton.arrow.y1, dimensions.bottomButton.arrow.x2, dimensions.bottomButton.arrow.y2, dimensions.bottomButton.arrow.x3, dimensions.bottomButton.arrow.y3)
+			drawRoundedRectangle('fill', dimensions.slider.bottomButton.background.x, dimensions.slider.bottomButton.background.y, dimensions.slider.bottomButton.background.w, dimensions.slider.bottomButton.background.h, dimensions.slider.bottomButton.background.r)
+			love.graphics.polygon('fill', dimensions.slider.bottomButton.arrow.x1, dimensions.slider.bottomButton.arrow.y1, dimensions.slider.bottomButton.arrow.x2, dimensions.slider.bottomButton.arrow.y2, dimensions.slider.bottomButton.arrow.x3, dimensions.slider.bottomButton.arrow.y3)
 
 			-- Scroll bar slider height resize
 			local prev_slider_height = console.scroll.slider_height
 			if console.messages_total_lines > console.max_lines then
-				console.scroll.slider_height = dimensions.background.h * (console.max_lines / console.messages_total_lines)
+				console.scroll.slider_height = dimensions.slider.background.h * (console.max_lines / console.messages_total_lines)
 			else
-				console.scroll.slider_height = dimensions.background.h
+				console.scroll.slider_height = dimensions.slider.background.h
 			end
 
 			if console.scroll.offset == nil then
 				-- Set initial scroll position
-				console.scroll.offset = dimensions.background.h - console.scroll.slider_height
-			elseif console.start_line_offset >= 0 then
-				-- Do not scroll if the slider is at the bottom
-				console.scroll.offset = console.scroll.offset + (prev_slider_height - console.scroll.slider_height)
+				console.scroll.offset = dimensions.slider.background.h - console.scroll.slider_height
 			end
 
 			-- Scroll bar slider and dragging
-			if console.mouse_pressed_coords.y and (mouseInRectangle(dimensions.background.x, dimensions.background.y + console.scroll.offset, dimensions.background.w, console.scroll.slider_height) or console.scroll.drag) then
+			local sliderHovered = mouseInRectangle(dimensions.slider.background.x, dimensions.slider.background.y + console.scroll.offset, dimensions.slider.background.w, console.scroll.slider_height)
+			if console.mouse_pressed_coords.y and (sliderHovered or console.scroll.drag) then
+				-- Dragging (not necessarily hovering once started)
 				console.scroll.drag = true
 				love.graphics.setColor(0.5, 0.5, 0.5, 0.9)
+				
 				local delta = love.mouse.getY() - console.mouse_pressed_coords.y
-				local maxOffset = dimensions.background.h - console.scroll.slider_height
+				local maxOffset = dimensions.slider.background.h - console.scroll.slider_height
+				
 				console.scroll.offset = math.min(maxOffset, math.max(0, console.scroll.offset + delta))
 				console.mouse_pressed_coords.y = love.mouse.getY()
+			elseif sliderHovered then
+				-- Hovering but not dragging
+				love.graphics.setColor(0.5, 0.5, 0.5, 0.75)
 			else
-				love.graphics.setColor(0.5, 0.5, 0.5, 0.7)
+				-- Not hovering
+				love.graphics.setColor(0.5, 0.5, 0.5, 0.6)
 			end
-			love.graphics.rectangle('fill', dimensions.background.x, dimensions.background.y + console.scroll.offset, dimensions.background.w, console.scroll.slider_height)
-			
-			-- Debug information
-			if (console.scroll.offset) then
-				love.graphics.setColor(1, 0.8, 0.6, 1) -- white
-				local percentage = (console.scroll.offset / (dimensions.background.h - console.scroll.slider_height))
-				love.graphics.print("percentage " .. percentage, love.graphics.getWidth() - 200, love.graphics.getHeight() - 100)
+			love.graphics.rectangle('fill', dimensions.slider.background.x, dimensions.slider.background.y + console.scroll.offset, dimensions.slider.background.w, console.scroll.slider_height)
 
-				local max_offset = math.max(0, console.messages_total_lines - console.max_lines)
-				love.graphics.print("max_offset " .. max_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 80)
-				
-				local true_offset = math.floor(max_offset * percentage);
-				love.graphics.print("true_offset " .. true_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 60)
-				
-				love.graphics.print("total_lines " .. console.messages_total_lines, love.graphics.getWidth() - 200, love.graphics.getHeight() - 40)
-				love.graphics.print("start_line " .. console.start_line_offset, love.graphics.getWidth() - 200, love.graphics.getHeight() - 20)
-				
-				if true_offset ~= true_offset then 
-					
-				else
-					console.start_line_offset = true_offset - max_offset
-				end
+			-- Print messages
+			local messages = console:getMessagesToDisplay()
+			for index, message in ipairs(messages) do
+				love.graphics.setColor(0, 0, 0, 1)
+				love.graphics.print(message:formatted(), dimensions.window.x + dimensions.window.padding.l + 1, dimensions.window.y + dimensions.window.padding.t + 1 + (index - 1) * console.line_height)
+				local r, g, b = console:getMessageColor(message)
+				love.graphics.setColor(r, g, b, 1)
+				love.graphics.print(message:formatted(), dimensions.window.x + dimensions.window.padding.l, dimensions.window.y + dimensions.window.padding.t + (index - 1) * console.line_height)
 			end
-
-			-- Command line text
-            love.graphics.setColor(1, 1, 1, 1) -- white
-            love.graphics.print(console.cmd, 10, love.graphics.getHeight() - 30)
         end
     end,
     on_key_released = function(key_name)

@@ -9,7 +9,7 @@ return {
     logger = logger,
     log_level = 'INFO',
     is_open = false,
-    cmd = '> ',
+    cmd = '',
     line_height = 20,
     max_lines = love.graphics.getHeight() / 20,
     start_line_offset = 1,
@@ -32,6 +32,73 @@ return {
 		offset = nil,
 		slider_height = nil
 	},
+	command_prefix = '>',
+	command_cursor = {
+		symbol = '|',
+		visible = false,
+		timer = 30,
+		countdown = 30,
+		position = 0
+	},
+	command_insert = function(self)
+		return function (character)
+			self.cmd = string.sub(self.cmd, 1, self.command_cursor.position) .. character .. string.sub(self.cmd, self.command_cursor.position + #character)
+			self.command_cursor.position = self.command_cursor.position + #character
+			self.command_cursor.visible = true
+			self.command_cursor.countdown = self.command_cursor.timer
+		end
+	end,
+	command_cursor_to_end = function(self)
+		self.command_cursor.position = #self.cmd
+	end,
+	dimensions = {
+		window = {
+			x = 10, y = 10,
+			w = love.graphics.getWidth() - 40, 
+			h = love.graphics.getHeight() - 53,
+			r = {tl = 7, tr = 0, bl = 7, br = 0},
+			padding = {t = 8, r = 3, b = 8, l = 3}
+		},
+		commandInput = {
+			background = { 
+				x = 10, y = love.graphics.getHeight() - 35 - 3,
+				w = love.graphics.getWidth() - 20, h = 25 + 3,
+				r = {tl = 7, tr = 7, bl = 7, br = 7}
+			},
+			text = { x = 17, y = love.graphics.getHeight() - 34 }
+		},
+		slider = {
+			background = { 
+				x = love.graphics.getWidth() - 30, y = 30, 
+				w = 20, h = love.graphics.getHeight() - 93
+			},
+			topButton = {
+				background = { 
+					x = love.graphics.getWidth() - 30, y = 10, 
+					w = 20, h = 20,
+					r = {tl = 0, tr = 7, bl = 0, br = 0}
+				},
+				arrow = {
+					x1 = love.graphics.getWidth() - 26, y1 = 26, 
+					x2 = love.graphics.getWidth() - 14, y2 = 26, 
+					x3 = love.graphics.getWidth() - 20, y3 = 14
+				},
+				
+			},
+			bottomButton = {
+				background = {
+					x = love.graphics.getWidth() - 30, y = (love.graphics.getHeight() - 93) + 30, 
+					w = 20, h = 20,
+					r = {tl = 0, tr = 0, bl = 0, br = 7}
+				},
+				arrow = {
+					x1 = love.graphics.getWidth() - 26, y1 = (love.graphics.getHeight() - 93) + 34, 
+					x2 = love.graphics.getWidth() - 14, y2 = (love.graphics.getHeight() - 93) + 34, 
+					x3 = love.graphics.getWidth() - 20, y3 = (love.graphics.getHeight() - 93) + 46
+				}
+			}
+		}
+	},
     commands = {},
     toggle = function(self)
         self.is_open = not self.is_open
@@ -39,9 +106,7 @@ return {
         if self.is_open then
             self.start_line_offset = self.max_lines
             local oldTextInput = love.textinput
-            love.textinput = function(character)
-                self.cmd = self.cmd .. character
-            end
+            love.textinput = self:command_insert()
         else
             love.textinput = nil
         end
@@ -62,7 +127,7 @@ return {
         return prefix
     end,
     tryAutocomplete = function(self)
-        local command = self.cmd:sub(3) -- remove the "> " prefix
+        local command = self.cmd
         local cmd = {}
         -- split command into parts
         for part in command:gmatch('%S+') do
@@ -108,7 +173,7 @@ return {
             return 1, 1, 1
         end
         if message.level == 'INFO' then
-            return 0, 0.9, 1
+            return 0.011, 0.691, 0.984
         end
         if message.level == 'WARN' then
             return 1, 0.5, 0
@@ -130,7 +195,7 @@ return {
 		self.messages_total_lines = 0
         for _, message in ipairs(logging.getAllMessages()) do
             if message.level_numeric >= self.logger.log_levels[self.log_level] then
-				self.messages_total_lines = self.messages_total_lines + #self:wrapText(message.text, love.graphics.getWidth() - 20)
+				self.messages_total_lines = self.messages_total_lines + #self:wrapText(message.text, self.dimensions.window.w - (self.dimensions.window.padding.l + self.dimensions.window.padding.r))
                 table.insert(filtered, message)
             end
         end
@@ -145,7 +210,7 @@ return {
         local all_messages = {}
 
         for _, message in ipairs(base_messages) do
-            local wrappedLines = self:wrapText(message.text, love.graphics.getWidth() - 20)
+            local wrappedLines = self:wrapText(message.text, self.dimensions.window.w - (self.dimensions.window.padding.l + self.dimensions.window.padding.r))
             for _, line in ipairs(wrappedLines) do
                 table.insert(all_messages, {
                     text = line,
@@ -204,9 +269,7 @@ return {
         if self.modifiers.ctrl or self.modifiers.meta then
             love.textinput = nil
         else
-            love.textinput = function(character)
-                self.cmd = self.cmd .. character
-            end
+            love.textinput = self:command_insert()
         end
     end,
     typeKey = function(self, key_name)
@@ -224,17 +287,19 @@ return {
         -- cmd+C on mac, ctrl+C on windows/linux
         if key_name == 'c' and
             ((platform.is_mac and self.modifiers.meta) or (not platform.is_mac and self.modifiers.ctrl)) then
-            if self.cmd:sub(3) == '' then
+            if self.cmd == '' then
                 -- do nothing if the buffer is empty
                 return
             end
-            love.system.setClipboardText(self.cmd:sub(3))
+            love.system.setClipboardText(self.cmd)
+			self:command_cursor_to_end()
             return
         end
         -- cmd+V on mac, ctrl+V on windows/linux
         if key_name == 'v' and
             ((platform.is_mac and self.modifiers.meta) or (not platform.is_mac and self.modifiers.ctrl)) then
             self.cmd = self.cmd .. love.system.getClipboardText()
+			self.command_cursor.position = self.command_cursor.position + #love.system.getClipboardText()
             return
         end
         if key_name == 'escape' then
@@ -244,20 +309,47 @@ return {
         end
         -- Delete the current command, on mac it's cmd+backspace
         if key_name == 'delete' or (platform.is_mac and self.modifiers.meta and key_name == 'backspace') then
-            self.cmd = '> '
+            self.cmd = ''
+			self.command_cursor.position = 0
             return
         end
-        if key_name == 'end' or (platform.is_mac and key_name == 'right' and self.modifiers.meta) then
-            -- move text to the most recent (bottom)
-            self.start_line_offset = self.max_lines
-            return
-        end
-        if key_name == 'home' or (platform.is_mac and key_name == 'left' and self.modifiers.meta) then
-            -- move text to the oldest (top)
-            --local messages = self:getFilteredMessages()
-            self.start_line_offset = self.max_lines - self.messages_total_lines --#all_messages
-            return
-        end
+        -- if key_name == 'end' or (platform.is_mac and key_name == 'right' and self.modifiers.meta) then
+        --     -- move text to the most recent (bottom)
+        --     self.start_line_offset = self.max_lines
+        --     return
+        -- end
+        -- if key_name == 'home' or (platform.is_mac and key_name == 'left' and self.modifiers.meta) then
+        --     -- move text to the oldest (top)
+        --     --local messages = self:getFilteredMessages()
+        --     self.start_line_offset = self.max_lines - self.messages_total_lines --#all_messages
+        --     return
+        -- end
+		if key_name == 'left' then
+			if self.command_cursor.position > 0 then
+				local byte_position = utf8.offset(self.cmd, -1, self.command_cursor.position)
+				if byte_position then
+					self.command_cursor.position = byte_position
+				else
+					self.command_cursor.position = 0
+				end
+			end
+			self.command_cursor.visible = true
+			self.command_cursor.countdown = self.command_cursor.timer
+			return
+		end
+		if key_name == 'right' then
+			if self.command_cursor.position < #self.cmd then
+				local byte_position = utf8.offset(self.cmd, 1, self.command_cursor.position + 1)
+				if byte_position then
+					self.command_cursor.position = byte_position
+				else
+					self.command_cursor.position = #self.cmd
+				end
+			end
+			self.command_cursor.visible = true
+			self.command_cursor.countdown = self.command_cursor.timer
+			return
+		end
         if key_name == 'pagedown' or (platform.is_mac and key_name == 'down' and self.modifiers.meta) then
             -- move text down by max_lines
             self.start_line_offset = math.min(self.start_line_offset + self.max_lines, self.max_lines)
@@ -273,20 +365,24 @@ return {
             -- move to the next command in the history (in reverse order of insertion)
             self.history_index = math.min(self.history_index + 1, #self.command_history)
             if self.history_index == 0 then
-                self.cmd = '> '
+                self.cmd = ''
+				self.command_cursor.position = 0
                 return
             end
-            self.cmd = '> ' .. self.command_history[#self.command_history - self.history_index + 1]
+            self.cmd = self.command_history[#self.command_history - self.history_index + 1]
+			self:command_cursor_to_end()
             return
         end
         if key_name == 'down' then
             -- move to the previous command in the history (in reverse order of insertion)
             self.history_index = math.max(self.history_index - 1, 0)
             if self.history_index == 0 then
-                self.cmd = '> '
+                self.cmd = ''
+				self.command_cursor.position = 0
                 return
             end
-            self.cmd = '> ' .. self.command_history[#self.command_history - self.history_index + 1]
+            self.cmd = '' .. self.command_history[#self.command_history - self.history_index + 1]
+			self:command_cursor_to_end()
             return
         end
         if key_name == 'tab' then
@@ -299,6 +395,7 @@ return {
                 end
                 -- then replace the whole last part with the autocompleted command
                 self.cmd = self.cmd:sub(1, #self.cmd - #lastPart) .. completion
+				self:command_cursor_to_end()
             end
             return
         end
@@ -323,44 +420,46 @@ return {
             self:modifiersListener()
             return
         end
-        if key_name == 'backspace' then
-            if #self.cmd > 2 then
-                local byteoffset = utf8.offset(self.cmd, -1)
-                if byteoffset then
-                    -- remove the last UTF-8 character.
-                    -- string.sub operates on bytes rather than UTF-8 characters, so we couldn't do string.sub(text, 1, -2).
-                    self.cmd = string.sub(self.cmd, 1, byteoffset - 1)
-                end
-            end
-            return
-        end
+		if key_name == 'backspace' then
+			if #self.cmd > 0 and self.command_cursor.position > 0 then
+				local byteoffset = utf8.offset(self.cmd, 0, self.command_cursor.position)
+				if byteoffset then
+					self.cmd = string.sub(self.cmd, 1, byteoffset - 1) .. string.sub(self.cmd, self.command_cursor.position + 1)
+					self.command_cursor.position = byteoffset - 1
+				end
+			end
+			return
+		end
         if key_name == 'return' or key_name == 'kpenter' then
-            self.logger:print(self.cmd)
-            local cmdName = self.cmd:sub(3)
-            cmdName = cmdName:match('%S+')
-            if cmdName == nil then
-                return
-            end
-            local args = {}
-            local argString = self.cmd:sub(3 + #cmdName + 1)
-            if argString then
-                for arg in argString:gmatch('%S+') do
-                    table.insert(args, arg)
-                end
-            end
-            local success = false
-            if self.commands[cmdName] then
-                success = self.commands[cmdName].call(args)
-            else
-                self.logger:error('Command not found: ' .. cmdName)
-            end
-            if success then
-                -- only add the command to the history if it was successful
-                self:addToHistory(self.cmd:sub(3))
-            end
+        	if #self.cmd > 0 then
+				self.logger:print(self.command_prefix .. ' ' .. self.cmd)
+				local cmdName = self.cmd
+				cmdName = cmdName:match('%S+')
+				if cmdName == nil then
+					return
+				end
+				local args = {}
+				local argString = self.cmd:sub(#cmdName + 1)
+				if argString then
+					for arg in argString:gmatch('%S+') do
+						table.insert(args, arg)
+					end
+				end
+				local success = false
+				if self.commands[cmdName] then
+					success = self.commands[cmdName].call(args)
+				else
+					self.logger:error('Command not found: ' .. cmdName)
+				end
+				if success then
+					-- only add the command to the history if it was successful
+					self:addToHistory(self.cmd)
+				end
 
-            self.cmd = '> '
-            return
+				self.cmd = ''
+				self.command_cursor.position = 0
+			end
+			return
         end
     end,
     addToHistory = function(self, command)
@@ -447,51 +546,5 @@ return {
         end
         table.insert(lines, line)
         return lines
-    end,
-	getScrollBarDimensions = function(self)
-		local dimensions = {}
-
-		dimensions.background = {
-			x = love.graphics.getWidth() - 30, 
-			y = 30, 
-			w = 20, 
-			h = love.graphics.getHeight() - 60
-		}
-
-		dimensions.topButton = {
-			background = {
-				x = love.graphics.getWidth() - 30, 
-				y = 10, 
-				w = 20, 
-				h = 20
-			},
-			arrow = {
-				x1 = love.graphics.getWidth() - 26, 
-				y1 = 26, 
-				x2 = love.graphics.getWidth() - 14, 
-				y2 = 26, 
-				x3 = love.graphics.getWidth() - 20, 
-				y3 = 14
-			}
-		}
-		
-		dimensions.bottomButton = {
-			background = {
-				x = love.graphics.getWidth() - 30, 
-				y = (love.graphics.getHeight() - 60) + 30, 
-				w = 20, 
-				h = 20
-			},
-			arrow = {
-				x1 = love.graphics.getWidth() - 26, 
-				y1 = (love.graphics.getHeight() - 60) + 34, 
-				x2 = love.graphics.getWidth() - 14, 
-				y2 = (love.graphics.getHeight() - 60) + 34, 
-				x3 = love.graphics.getWidth() - 20, 
-				y3 = (love.graphics.getHeight() - 60) + 46
-			}
-		}
-
-		return dimensions
-	end
+    end
 }
